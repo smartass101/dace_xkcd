@@ -5,7 +5,7 @@ import subprocess
 
 
 window_prop_regexp = re.compile(
-    r'(?P<property>.*\(.*\))(?P<relation>:| = )(?P<value>.*)')
+    r'(?P<property>.*)\((?P<type>.*)\)(?P<relation>:| = )(?P<value>.*)')
 
 
 def window_properties(window_id):
@@ -14,7 +14,8 @@ def window_properties(window_id):
     obtained by calling xprop -id *window_id*
     '''
     output = subprocess.check_output(['xprop', '-id', window_id])
-    ret = {}
+    properties = {}
+    properties_types = {}
     rel = None
     compound_value = None
     
@@ -24,10 +25,11 @@ def window_properties(window_id):
             if rel == ':':
                 compound_value.append(line.strip())
         else:
-            prop, rel, value = match.groups()
+            prop, prop_type, rel, value = match.groups()
+            properties_types[prop] = prop_type
             if rel == ':':
                 compound_value = []
-                ret[prop] = compound_value
+                properties[prop] = compound_value
                 if value:
                     compound_value.append(value)
                 continue
@@ -35,8 +37,8 @@ def window_properties(window_id):
                 value = [i.strip(' "') for i in value.strip('{}').split(',')]
             else:
                 value = value.strip('"')
-            ret[prop] = value
-    return ret
+            properties[prop] = value
+    return properties, properties_types
 
     
 
@@ -62,4 +64,4 @@ if __name__ == '__main__':
             continue
         last_window_id = window_id
         logger.debug('New focused window id %s' % window_id)
-        logger.debug('Focused window properties: %r' % window_properties(window_id))
+        logger.debug('Focused window properties: %r\ntypes: %r' % window_properties(window_id))
