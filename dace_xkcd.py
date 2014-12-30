@@ -12,6 +12,8 @@ def window_properties(window_id):
     '''Get window properties in the form of a dictionary
 
     obtained by calling xprop -id *window_id*
+    It is line buffered, but that is because the output is read
+    from pipe line by line
     '''
     output = subprocess.check_output(['xprop', '-id', window_id])
     properties = {}
@@ -60,7 +62,7 @@ if __name__ == '__main__':
     last_window_id = None
     while True:                 # TODO for some max duration, e.g. 25 min
         window_id = monitor.stdout.readline().split()[-1]
-        if window_id == last_window_id:
+        if window_id == last_window_id or window_id == '0x0':
             continue
         last_window_id = window_id
         logger.debug('New focused window id %s' % window_id)
