@@ -1,48 +1,53 @@
 import re
-import argparse
+import select
 import logging
+import argparse
 import subprocess
 
 
 window_prop_regexp = re.compile(
-    r'(?P<property>.*)\((?P<type>.*)\)(?P<relation>:| = )(?P<value>.*)')
+    r'(?P<property>.*)\((?P<type>.*)\) = (?P<value>.*)')
 
 
-def window_properties(window_id):
+def window_property(xprop_line):
     '''Get window properties in the form of a dictionary
 
     obtained by calling xprop -id *window_id*
     It is line buffered, but that is because the output is read
     from pipe line by line
-    '''
-    output = subprocess.check_output(['xprop', '-id', window_id])
-    properties = {}
-    properties_types = {}
-    rel = None
-    compound_value = None
-    
-    for line in output.splitlines():
-        match = window_prop_regexp.match(line)
-        if match is None:
-            if rel == ':':
-                compound_value.append(line.strip())
-        else:
-            prop, prop_type, rel, value = match.groups()
-            properties_types[prop] = prop_type
-            if rel == ':':
-                compound_value = []
-                properties[prop] = compound_value
-                if value:
-                    compound_value.append(value)
-                continue
-            if '",' in value:
-                value = [i.strip(' "') for i in value.strip('{}').split(',')]
-            else:
-                value = value.strip('"')
-            properties[prop] = value
-    return properties, properties_types
 
-    
+    Gets only simple assignment properties ( = ) as only they are
+    really useful for client matching.
+    '''
+    match = window_prop_regexp.match(xprop_line)
+    if match is None:
+        return None, None, None
+    property_name, property_type, value = match.groups()
+    if '",' in value:
+        value = [i.strip(' "') for i in value.strip('{}').split(',')]
+    else:
+        value = value.strip('"')
+    return property_name, property_type, value
+
+
+def create_active_monitor(window_id):
+    active_monitor = subprocess.Popen(['xprop', '-spy', '-id', window_id],
+                                    stdout=subprocess.PIPE,
+                                )
+    return active_monitor
+
+
+_LAST_WINDOW_ID = None
+
+
+def get_new_active_window_id(root_monitor):
+    global _LAST_WINDOW_ID
+    window_id = root_monitor.stdout.readline().split()[-1]
+    if window_id == _LAST_WINDOW_ID or window_id == '0x0':
+        return None
+    _LAST_WINDOW_ID = window_id
+    return window_id
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='DACE XKCD')
@@ -54,16 +59,24 @@ if __name__ == '__main__':
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
-    monitor = subprocess.Popen(['xprop', '-spy', '-root',
-                                '_NET_ACTIVE_WINDOW'],
-                               stdout=subprocess.PIPE,
-                           )
+    root_monitor = subprocess.Popen(['xprop', '-spy', '-root',
+                                     '_NET_ACTIVE_WINDOW'],
+                                    stdout=subprocess.PIPE,
+                                )
 
-    last_window_id = None
-    while True:                 # TODO for some max duration, e.g. 25 min
-        window_id = monitor.stdout.readline().split()[-1]
-        if window_id == last_window_id or window_id == '0x0':
-            continue
-        last_window_id = window_id
-        logger.debug('New focused window id %s' % window_id)
-        logger.debug('Focused window properties: %r\ntypes: %r' % window_properties(window_id))
+    active_window_id = get_new_active_window_id(root_monitor)
+    active_monitor = create_active_monitor(active_window_id)
+
+    while True:          # TODO for a given time interval, e.g. 25 min
+        rlist, _, _ = select.select([root_monitor.stdout,
+                                     active_monitor.stdout], [], [])
+        if root_monitor.stdout in rlist:
+            active_window_id = get_new_active_window_id(root_monitor)
+            if active_window_id is not None:
+                logger.debug('New active window ID %s' % active_window_id)
+                active_monitor.terminate()
+                active_monitor = create_active_monitor(active_window_id)
+        elif active_monitor.stdout in rlist:
+            property_name,_ , value = window_property(active_monitor.stdout.readline())
+            if property_name is not None:
+                logger.debug('New active window PROPERTY %s = %r' % (property_name, value))
