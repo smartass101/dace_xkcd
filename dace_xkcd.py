@@ -64,25 +64,25 @@ def execute_command(command):
 
 def check_properties(window_properties, rules):
     for (rules_dict, short_fuse, blacklist, command) in rules:
+        matches = []
         for prop, regexp in rules_dict.items():
             try:
                 values = window_properties[prop]
             except KeyError:
+                matches.append(None)
                 continue
             if not isinstance(values, list):
                 values = [values]
-            #import pdb; pdb.set_trace()
             for value in values:
-                if regexp.match(value):
-                    if not blacklist and short_fuse:
-                        return
-                    elif blacklist and short_fuse:
-                        execute_command(command)
-                else:
-                    if not blacklist and not short_fuse:
-                        execute_command(command)
-                    elif blacklist and not short_fuse:
-                        return
+                matches.append(regexp.match(value))
+        #import pdb; pdb.set_trace()
+        if not ((short_fuse and any(matches))
+                or (not short_fuse and all(matches))):
+            continue            # not enough information
+        logger.debug('matches for rules %r: %r' % (rules_dict, matches))
+        if blacklist:
+            execute_command(command)
+        break                   # break for whitelist anyways
 
 
 def get_rules(config):
