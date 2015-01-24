@@ -63,7 +63,7 @@ def execute_command(command):
 
 
 def check_properties(window_properties, rules):
-    for (rules_dict, short_fuse, blacklist, command) in rules:
+    for (rules_dict, short_fuse, blacklist, command, ignore) in rules:
         matches = []
         for prop, regexp in rules_dict.items():
             try:
@@ -85,16 +85,21 @@ def check_properties(window_properties, rules):
         break                   # break for whitelist anyways
 
 
+_IGNORE_OPTIONS = ['short_fuse', 'blacklist', 'command', 'ignore']
+
+
 def get_rules(config):
     rules = []
     for section in config.sections():
         rules_dict = {name: re.compile(value, re.IGNORECASE) for name, value in
-                       config.items(section) if name not in ['short_fuse', 'blacklist', 'command']}
+                       config.items(section) if name not in _IGNORE_OPTIONS}
         rules.append((rules_dict, config.getboolean(section,
                                                     'short_fuse'),
                       config.getboolean(section,
                                         'blacklist'),
-                      config.get(section, 'command')))
+                      config.get(section, 'command'),
+                      config.get(section, 'ignore').split(','),
+                  ))
     return rules
 
 
