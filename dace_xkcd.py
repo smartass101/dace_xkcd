@@ -91,7 +91,7 @@ _IGNORE_OPTIONS = ['short_fuse', 'blacklist', 'command', 'ignore']
 def get_rules(config):
     rules = []
     for section in config.sections():
-        rules_dict = {name: re.compile(value, re.IGNORECASE) for name, value in
+        rules_dict = {name: re.compile(value) for name, value in
                        config.items(section) if name not in _IGNORE_OPTIONS}
         rules.append((rules_dict, config.getboolean(section,
                                                     'short_fuse'),
